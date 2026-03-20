@@ -244,7 +244,10 @@ func (dc *DiskCache) buildIndex() {
 		dc.mu.Unlock()
 		return nil
 	})
-	cdnlog.Info("disk cache index built", "entries", len(dc.index), "size", dc.currentSize.Load())
+	dc.mu.RLock()
+	count := len(dc.index)
+	dc.mu.RUnlock()
+	cdnlog.Info("disk cache index built", "entries", count, "size", dc.currentSize.Load())
 }
 
 func (dc *DiskCache) evictionLoop() {
