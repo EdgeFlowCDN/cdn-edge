@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"net"
 	"net/http"
 
 	"github.com/EdgeFlowCDN/cdn-edge/cache"
@@ -16,6 +17,7 @@ type Server struct {
 	cacheManager *cache.Manager
 	fetcher      *origin.Fetcher
 	accessLogger *cdnlog.AccessLogger
+	metrics      *Metrics
 }
 
 // NewServer creates a new proxy server.
@@ -31,6 +33,7 @@ func NewServer(cfg *config.Config, cacheManager *cache.Manager, accessLogger *cd
 		cacheManager: cacheManager,
 		fetcher:      origin.NewFetcher("round-robin"),
 		accessLogger: accessLogger,
+		metrics:      NewMetrics(),
 	}
 }
 
@@ -42,6 +45,23 @@ func (s *Server) ListenAndServe() error {
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: s,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			switch state {
+			case http.StateNew:
+				s.metrics.ConnOpen()
+			case http.StateClosed, http.StateHijacked:
+				s.metrics.ConnClose()
+			}
+		},
 	}
 	return srv.ListenAndServe()
+}
+
+// StartMetricsServer starts the /metrics and /health endpoints on a separate port.
+func (s *Server) StartMetricsServer(addr string) error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", s.metrics.MetricsHandler())
+	mux.HandleFunc("/health", HealthHandler())
+	cdnlog.Info("starting metrics server", "addr", addr)
+	return http.ListenAndServe(addr, mux)
 }

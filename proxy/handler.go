@@ -45,6 +45,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if entry != nil {
 		s.writeResponse(w, entry, cacheStatus, requestID)
 		s.logAccess(r, requestID, entry.StatusCode, int64(len(entry.Body)), string(cacheStatus), 0, 0, start)
+		if s.metrics != nil {
+			s.metrics.RecordRequest(r.Method, entry.StatusCode, r.Host, string(cacheStatus), int64(len(entry.Body)), time.Since(start))
+		}
 		return
 	}
 
@@ -79,6 +82,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Write response
 	s.writeOriginResponse(w, result, requestID)
 	s.logAccess(r, requestID, result.StatusCode, int64(len(result.Body)), string(cache.StatusMiss), result.StatusCode, originDuration, start)
+	if s.metrics != nil {
+		s.metrics.RecordRequest(r.Method, result.StatusCode, r.Host, string(cache.StatusMiss), int64(len(result.Body)), time.Since(start))
+		s.metrics.RecordOriginRequest("success", r.Host, time.Duration(originDuration*float64(time.Second)))
+	}
 }
 
 func (s *Server) writeResponse(w http.ResponseWriter, entry *cache.Entry, status cache.CacheStatus, requestID string) {

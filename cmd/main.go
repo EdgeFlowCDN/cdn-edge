@@ -68,6 +68,15 @@ func main() {
 	// Start server
 	server := proxy.NewServer(cfg, cacheManager, accessLogger)
 
+	// Start metrics/health server
+	if cfg.Server.MetricsListen != "" {
+		go func() {
+			if err := server.StartMetricsServer(cfg.Server.MetricsListen); err != nil {
+				cdnlog.Error("metrics server failed", "error", err)
+			}
+		}()
+	}
+
 	// Handle shutdown signals
 	go func() {
 		sigCh := make(chan os.Signal, 1)

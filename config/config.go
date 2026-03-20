@@ -18,8 +18,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Listen      string `yaml:"listen"`
-	ListenHTTPS string `yaml:"listen_https"`
+	Listen        string `yaml:"listen"`
+	ListenHTTPS   string `yaml:"listen_https"`
+	MetricsListen string `yaml:"metrics_listen"`
 }
 
 type CacheConfig struct {
