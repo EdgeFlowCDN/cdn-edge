@@ -57,6 +57,9 @@ func (s *Server) ListenAndServe() error {
 	return srv.ListenAndServe()
 }
 
+// Metrics returns the server's metrics instance.
+func (s *Server) Metrics() *Metrics { return s.metrics }
+
 // StartMetricsServer starts the /metrics and /health endpoints on a separate port.
 func (s *Server) StartMetricsServer(addr string) error {
 	mux := http.NewServeMux()

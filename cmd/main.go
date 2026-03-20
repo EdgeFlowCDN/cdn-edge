@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/EdgeFlowCDN/cdn-edge/cache"
 	"github.com/EdgeFlowCDN/cdn-edge/config"
@@ -77,15 +81,6 @@ func main() {
 		}()
 	}
 
-	// Handle shutdown signals
-	go func() {
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		sig := <-sigCh
-		cdnlog.Info("shutting down", "signal", sig.String())
-		os.Exit(0)
-	}()
-
 	cdnlog.Info("EdgeFlow edge node starting",
 		"listen", cfg.Server.Listen,
 		"domains", len(cfg.Domains),
@@ -93,7 +88,40 @@ func main() {
 		"disk_cache", cfg.Cache.Disk.MaxSize,
 	)
 
-	if err := server.ListenAndServe(); err != nil {
+	// Create HTTP server explicitly for graceful shutdown
+	srv := &http.Server{
+		Addr:    cfg.Server.Listen,
+		Handler: server,
+		ConnState: func(conn net.Conn, state http.ConnState) {
+			switch state {
+			case http.StateNew:
+				server.Metrics().ConnOpen()
+			case http.StateClosed, http.StateHijacked:
+				server.Metrics().ConnClose()
+			}
+		},
+	}
+
+	// Handle shutdown signals
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigCh
+		cdnlog.Info("received shutdown signal, draining connections", "signal", sig.String())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(ctx); err != nil {
+			cdnlog.Error("graceful shutdown failed, forcing close", "error", err)
+			srv.Close()
+		} else {
+			cdnlog.Info("graceful shutdown complete")
+		}
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		cdnlog.Fatal("server failed", "error", err)
 	}
 }
