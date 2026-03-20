@@ -2,6 +2,20 @@
 
 EdgeFlow CDN edge node — high-performance HTTP/HTTPS reverse proxy with caching.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    Client[Client] --> Edge[Edge Proxy :8080]
+    Edge --> MemCache[Memory Cache<br/>Sharded LRU]
+    Edge --> DiskCache[Disk Cache<br/>Hash Bucketed]
+    Edge --> Origin[Origin Server]
+    Edge --> Metrics[Prometheus :9100]
+    CP[Control Plane] -->|gRPC Config Sync| Edge
+    Redis[(Redis)] -->|Pub/Sub Purge| Edge
+    Edge -->|Access Logs| CH[(ClickHouse)]
+```
+
 ## Features
 
 - HTTP/HTTPS reverse proxy with Host-based domain routing
