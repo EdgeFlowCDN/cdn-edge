@@ -86,6 +86,10 @@ func main() {
 			cfg.ControlPlane.NodeIP,
 			// Config update callback — hot-reload domain configs
 			func(domains []cdngrpc.DomainConfig) {
+				if len(domains) == 0 {
+					cdnlog.Info("control plane returned 0 domains, keeping current config")
+					return
+				}
 				edgeConfigs := cdngrpc.ToEdgeConfigs(domains)
 				server.Reloader().ReloadDomains(edgeConfigs)
 				cdnlog.Info("domain config reloaded from control plane", "domains", len(edgeConfigs))

@@ -94,16 +94,10 @@ func (c *Client) pullFullConfig() error {
 	defer cancel()
 
 	req := &NodeInfo{NodeId: c.nodeID, Ip: c.nodeIP}
-	reqBytes, _ := json.Marshal(req)
-
-	var respBytes []byte
-	err := c.conn.Invoke(ctx, "/edgeflow.EdgeService/GetFullConfig", reqBytes, &respBytes)
+	resp := &FullConfigResponse{}
+	err := c.conn.Invoke(ctx, "/edgeflow.EdgeService/GetFullConfig", req, resp,
+		grpc.CallContentSubtype("json"))
 	if err != nil {
-		return err
-	}
-
-	var resp FullConfigResponse
-	if err := json.Unmarshal(respBytes, &resp); err != nil {
 		return err
 	}
 
@@ -143,14 +137,14 @@ func (c *Client) watch() error {
 	defer cancel()
 
 	stream, err := c.conn.NewStream(ctx, &grpc.StreamDesc{ServerStreams: true},
-		"/edgeflow.EdgeService/WatchConfig")
+		"/edgeflow.EdgeService/WatchConfig",
+		grpc.CallContentSubtype("json"))
 	if err != nil {
 		return err
 	}
 
 	req := &NodeInfo{NodeId: c.nodeID, Ip: c.nodeIP}
-	reqBytes, _ := json.Marshal(req)
-	if err := stream.SendMsg(reqBytes); err != nil {
+	if err := stream.SendMsg(req); err != nil {
 		return err
 	}
 	if err := stream.CloseSend(); err != nil {
@@ -160,15 +154,9 @@ func (c *Client) watch() error {
 	log.Printf("[grpc-client] watching for config updates")
 
 	for {
-		var respBytes []byte
-		if err := stream.RecvMsg(&respBytes); err != nil {
-			return err
-		}
-
 		var update ConfigUpdate
-		if err := json.Unmarshal(respBytes, &update); err != nil {
-			log.Printf("[grpc-client] bad update: %v", err)
-			continue
+		if err := stream.RecvMsg(&update); err != nil {
+			return err
 		}
 
 		switch update.Action {
@@ -206,10 +194,9 @@ func (c *Client) sendHeartbeat() {
 		NodeId:    c.nodeID,
 		Timestamp: time.Now().Unix(),
 	}
-	reqBytes, _ := json.Marshal(req)
-
-	var respBytes []byte
-	if err := c.conn.Invoke(ctx, "/edgeflow.EdgeService/Heartbeat", reqBytes, &respBytes); err != nil {
+	resp := &HeartbeatResponse{}
+	if err := c.conn.Invoke(ctx, "/edgeflow.EdgeService/Heartbeat", req, resp,
+		grpc.CallContentSubtype("json")); err != nil {
 		log.Printf("[grpc-client] heartbeat failed: %v", err)
 	}
 }
@@ -248,4 +235,8 @@ type HeartbeatRequest struct {
 	MemUsage     float64 `json:"mem_usage"`
 	BandwidthBps int64   `json:"bandwidth_bps"`
 	Connections  int64   `json:"connections"`
+}
+
+type HeartbeatResponse struct {
+	Ok bool `json:"ok"`
 }
