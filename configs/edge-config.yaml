@@ -1,0 +1,27 @@
+server:
+  listen: ":8080"
+  listen_https: ":8443"
+
+cache:
+  memory:
+    max_size: "512MB"
+    max_object_size: "1MB"
+  disk:
+    path: "/tmp/cdn-edge-cache"
+    max_size: "10GB"
+    max_object_size: "500MB"
+
+log:
+  access_log: ""
+  error_log: ""
+  level: "info"
+
+domains:
+  - host: "cdn.example.com"
+    origins:
+      - addr: "https://origin.example.com"
+        weight: 100
+    cache:
+      default_ttl: "10m"
+      ignore_query: false
+      force_ttl: ""
