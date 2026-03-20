@@ -17,6 +17,12 @@ log:
   error_log: ""
   level: "info"
 
+control_plane:
+  addr: "cdn-control:9091"
+  node_id: "edge-docker-01"
+  node_ip: "cdn-edge"
+
+# Fallback domains if control plane is unavailable
 domains:
   - host: "cdn.example.com"
     origins:

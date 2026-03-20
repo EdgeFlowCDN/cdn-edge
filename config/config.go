@@ -11,10 +11,17 @@ import (
 )
 
 type Config struct {
-	Server  ServerConfig   `yaml:"server"`
-	Cache   CacheConfig    `yaml:"cache"`
-	Log     LogConfig      `yaml:"log"`
-	Domains []DomainConfig `yaml:"domains"`
+	Server       ServerConfig       `yaml:"server"`
+	Cache        CacheConfig        `yaml:"cache"`
+	Log          LogConfig          `yaml:"log"`
+	ControlPlane ControlPlaneConfig `yaml:"control_plane"`
+	Domains      []DomainConfig     `yaml:"domains"`
+}
+
+type ControlPlaneConfig struct {
+	Addr   string `yaml:"addr"`   // gRPC address, e.g. "cdn-control:9091"
+	NodeID string `yaml:"node_id"`
+	NodeIP string `yaml:"node_ip"`
 }
 
 type ServerConfig struct {

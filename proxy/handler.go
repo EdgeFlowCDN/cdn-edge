@@ -17,12 +17,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestID := uuid.New().String()
 
 	// Match domain
-	domainCfg, ok := s.domains[r.Host]
+	domainCfg, ok := s.reloader.GetDomain(r.Host)
 	if !ok {
 		// Try without port
-		host := r.Host
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			domainCfg, ok = s.domains[h]
+		if h, _, err := net.SplitHostPort(r.Host); err == nil {
+			domainCfg, ok = s.reloader.GetDomain(h)
 		}
 	}
 	if !ok {

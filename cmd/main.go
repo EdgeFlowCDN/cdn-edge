@@ -13,6 +13,7 @@ import (
 
 	"github.com/EdgeFlowCDN/cdn-edge/cache"
 	"github.com/EdgeFlowCDN/cdn-edge/config"
+	cdngrpc "github.com/EdgeFlowCDN/cdn-edge/grpc"
 	cdnlog "github.com/EdgeFlowCDN/cdn-edge/log"
 	"github.com/EdgeFlowCDN/cdn-edge/proxy"
 )
@@ -69,8 +70,43 @@ func main() {
 	}
 	defer accessLogger.Close()
 
-	// Start server
+	// Start server (initially with YAML-configured domains)
 	server := proxy.NewServer(cfg, cacheManager, accessLogger)
+
+	// Connect to control plane for config sync (if configured)
+	if cfg.ControlPlane.Addr != "" {
+		cdnlog.Info("connecting to control plane",
+			"addr", cfg.ControlPlane.Addr,
+			"node_id", cfg.ControlPlane.NodeID,
+		)
+
+		grpcClient := cdngrpc.NewClient(
+			cfg.ControlPlane.Addr,
+			cfg.ControlPlane.NodeID,
+			cfg.ControlPlane.NodeIP,
+			// Config update callback — hot-reload domain configs
+			func(domains []cdngrpc.DomainConfig) {
+				edgeConfigs := cdngrpc.ToEdgeConfigs(domains)
+				server.Reloader().ReloadDomains(edgeConfigs)
+				cdnlog.Info("domain config reloaded from control plane", "domains", len(edgeConfigs))
+			},
+			// Purge callback — execute cache purge
+			func(purgeType string, targets []string, domain string) {
+				executePurge(server.CacheManager(), purgeType, targets, domain)
+			},
+		)
+
+		if err := grpcClient.Start(); err != nil {
+			cdnlog.Error("failed to connect to control plane, using local config", "error", err)
+		} else {
+			defer grpcClient.Stop()
+			cdnlog.Info("connected to control plane")
+		}
+	} else {
+		cdnlog.Info("no control plane configured, using local YAML config",
+			"domains", len(cfg.Domains),
+		)
+	}
 
 	// Start metrics/health server
 	if cfg.Server.MetricsListen != "" {
@@ -83,7 +119,6 @@ func main() {
 
 	cdnlog.Info("EdgeFlow edge node starting",
 		"listen", cfg.Server.Listen,
-		"domains", len(cfg.Domains),
 		"memory_cache", cfg.Cache.Memory.MaxSize,
 		"disk_cache", cfg.Cache.Disk.MaxSize,
 	)
@@ -124,4 +159,30 @@ func main() {
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		cdnlog.Fatal("server failed", "error", err)
 	}
+}
+
+// executePurge handles purge commands from gRPC or Redis.
+func executePurge(cm *cache.Manager, purgeType string, targets []string, domain string) {
+	switch purgeType {
+	case "url":
+		for _, url := range targets {
+			cm.Delete(url)
+		}
+		cdnlog.Info("purge URLs completed", "count", len(targets), "domain", domain)
+	case "dir":
+		total := 0
+		for _, dir := range targets {
+			total += cm.Purge(dir)
+		}
+		cdnlog.Info("purge directory completed", "removed", total, "domain", domain)
+	case "all":
+		prefix := "http://" + domain
+		n1 := cm.Purge(prefix)
+		prefix = "https://" + domain
+		n2 := cm.Purge(prefix)
+		cdnlog.Info("purge all completed", "removed", n1+n2, "domain", domain)
+	default:
+		cdnlog.Warn("unknown purge type", "type", purgeType)
+	}
+
 }
